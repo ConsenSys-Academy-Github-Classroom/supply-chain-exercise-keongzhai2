@@ -4,9 +4,10 @@ pragma solidity >=0.5.16 <0.9.0;
 contract SupplyChain {
 
   // <owner>
-  address owner;
+  address public owner;
   // <skuCount>
-  uint private skuCount;
+  uint public skuCount;
+
   // <items mapping>
   mapping (uint256 => Item) public items;
   // <enum State: ForSale, Sold, Shipped, Received>
@@ -40,23 +41,26 @@ contract SupplyChain {
   // Create a modifer, `isOwner` that checks if the msg.sender is the owner of the contract
 
   // <modifier: isOwner
-  modifier isOwner (address _address) { 
-     require (owner == _address); 
+  modifier isOwner () { 
+     require (owner == msg.sender); 
     _;
   }
 
-  modifier verifyCaller (address _address) { 
-     require (msg.sender == _address); 
-    _;
+  modifier verifyCaller (address _address) {
+     require(msg.sender == _address);
+     _;
   }
 
   modifier paidEnough(uint _price) { 
-     require(msg.value >= _price); 
-    _;
+     assert(msg.value >= _price); 
+     _;
+     //require(msg.value >= _price); 
+    
   }
 
   modifier checkValue(uint _sku) {
     //refund them after pay for item (why it is before, _ checks for logic before func)
+    require(msg.value>= items[_sku].price);
     _;
      uint _price = items[_sku].price;
      uint amountToRefund = msg.value - _price;
@@ -74,7 +78,7 @@ contract SupplyChain {
   // modifier forSale
   modifier forSale(uint sku){
     require (items[sku].state == State.ForSale);
-      _;
+    _;
   }
   // modifier sold(uint _sku) 
   modifier sold(uint sku){
@@ -83,20 +87,20 @@ contract SupplyChain {
   } 
   // modifier shipped(uint _sku) 
   modifier shipped(uint sku){
-    require (items[sku].state == State.Sold);
+    require (items[sku].state == State.Shipped);
       _;
   }
   // modifier received(uint _sku) 
   modifier received(uint sku){
-    require (items[sku].state == State.Sold);
+    require (items[sku].state == State.Received);
       _;
   }
 
-  constructor() public {
+
+  constructor() public{ 
     // 1. Set the owner to the transaction sender
     owner = msg.sender;
-    // 2. Initialize the sku count to 0. Question, is this necessary?
-    skuCount = 0; //Not necessary
+    skuCount = 0;
   }
 
   function addItem(string memory _name, uint _price) public returns (bool) {
@@ -111,7 +115,7 @@ contract SupplyChain {
       sku: skuCount, 
       price: _price, 
       state: State.ForSale, 
-      seller: msg.sender, 
+      seller: msg.sender,
       buyer: address(0)
     });
     
@@ -136,10 +140,10 @@ contract SupplyChain {
   paidEnough(items[sku].price)
   checkValue(sku)
   {  
+    uint valueTransfer = items[sku].price; //amount to transfer
+    items[sku].seller.transfer(valueTransfer);
     items[sku].buyer = msg.sender;
     items[sku].state = State.Sold;
-    uint valueTransfer = msg.value; //amount to transfer
-    items[sku].seller.transfer(valueTransfer);
     emit LogSold(sku); 
   }
 
@@ -148,9 +152,11 @@ contract SupplyChain {
   //    - the person calling this function is the seller. 
   // 2. Change the state of the item to shipped. 
   // 3. call the event associated with this function!
+  //verifyCaller(_address)
   function shipItem(uint sku) public 
   sold(sku)
-  verifyCaller(items[sku].seller){
+  verifyCaller(items[sku].seller)
+  {
     items[sku].state = State.Shipped;
     emit LogShipped(sku);
   }
@@ -160,9 +166,17 @@ contract SupplyChain {
   //    - the person calling this function is the buyer. 
   // 2. Change the state of the item to received. 
   // 3. Call the event associated with this function!
+  /*function receiveItem(uint sku) public 
+  shipped(sku)
+  verifyCaller(items[sku].buyer){
+    items[sku].state = State.Received;
+    emit LogReceived(sku);
+  }*/
+
   function receiveItem(uint sku) public 
   shipped(sku)
   verifyCaller(items[sku].buyer){
+   
     items[sku].state = State.Received;
     emit LogReceived(sku);
   }
@@ -179,8 +193,6 @@ contract SupplyChain {
    buyer = items[_sku].buyer; 
      return (name, sku, price, state, seller, buyer); 
   } 
-
-  function() external{
-    revert();
-  }
 }
+
+
